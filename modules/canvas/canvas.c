@@ -38,6 +38,14 @@ void canvas_clear(Canvas *canvas, Color color)
 }
 
 // Optimized line drawing with memcpy for horizontal lines
+/* Round a clipped coordinate (within -0.5 .. limit - 0.5) to a pixel index */
+static int clip_round(double v, int limit)
+{
+	int i = (int)floor(v + 0.5);
+
+	return i < 0 ? 0 : (i > limit - 1 ? limit - 1 : i);
+}
+
 /* Liang-Barsky clip of a segment to the logical screen. Returns false when
  * none of it is visible. Coordinates arrive from Lua as raw integers, so
  * without this a far off-screen endpoint makes Bresenham step through
@@ -50,7 +58,11 @@ static bool clip_line_to_screen(int *x0, int *y0, int *x1, int *y1)
 	const double dx = (double)*x1 - sx;
 	const double dy = (double)*y1 - sy;
 	const double p[4] = { -dx, dx, -dy, dy };
-	const double q[4] = { sx, (double)(LOG_WIDTH - 1) - sx, sy, (double)(LOG_HEIGHT - 1) - sy };
+	/* Clip to the pixel edges (-0.5 .. N - 0.5), not the pixel centres: a
+	 * segment nearly parallel to the right or bottom edge must keep every
+	 * pixel it lights on screen. */
+	const double q[4] = { sx + 0.5, (double)LOG_WIDTH - 0.5 - sx, sy + 0.5,
+			      (double)LOG_HEIGHT - 0.5 - sy };
 	double t0 = 0.0;
 	double t1 = 1.0;
 
@@ -81,13 +93,12 @@ static bool clip_line_to_screen(int *x0, int *y0, int *x1, int *y1)
 		}
 	}
 
-	/* The clipped endpoints lie inside [0, LOG_WIDTH-1] x [0, LOG_HEIGHT-1],
-	 * so they are non-negative and +0.5 truncation rounds them. A segment
-	 * that was already on screen keeps t0 = 0, t1 = 1 and is unchanged. */
-	*x0 = (int)(sx + t0 * dx + 0.5);
-	*y0 = (int)(sy + t0 * dy + 0.5);
-	*x1 = (int)(sx + t1 * dx + 0.5);
-	*y1 = (int)(sy + t1 * dy + 0.5);
+	/* A segment that was already on screen keeps t0 = 0, t1 = 1 and is
+	 * unchanged. */
+	*x0 = clip_round(sx + t0 * dx, LOG_WIDTH);
+	*y0 = clip_round(sy + t0 * dy, LOG_HEIGHT);
+	*x1 = clip_round(sx + t1 * dx, LOG_WIDTH);
+	*y1 = clip_round(sy + t1 * dy, LOG_HEIGHT);
 	return true;
 }
 
