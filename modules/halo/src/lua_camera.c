@@ -719,6 +719,10 @@ static int lua_camera_capture(lua_State *L)
 	/* Clear error flag before triggering */
 	camera_state.capture_error = false;
 
+	/* The previous frame stops being readable now, not when the capture
+	 * thread next gets to run */
+	camera_state.ready = false;
+
 	/* Trigger capture */
 	k_sem_give(&camera_state.capture_sem);
 
