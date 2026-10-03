@@ -366,10 +366,11 @@ static struct mgmt_callback ota_dfu_callback = {
 #if defined(CONFIG_MCUMGR_GRP_OS_RESET_HOOK)
 /* mcumgr "os reset" is the last step of the standard DFU sequence and reboots
  * from inside Zephyr's os_mgmt, bypassing the halo_ble_conn_prepare_reboot()
- * that every other reboot path runs first. Without it the new image
- * warm-starts, alif_ble_enable() returns -EALREADY, gapm_configure() is
- * skipped and the device comes up without advertising. Run it from the reset
- * hook so a generic mcumgr client gets the same treatment as frame.reboot(). */
+ * that every other reboot path runs first. The SE-driven reset does not
+ * currently preserve noinit RAM, so the next boot starts BLE cold anyway;
+ * clearing the Alif warm-start flag here keeps that true if a reset path ever
+ * does preserve it (a warm start would skip gapm_configure() and leave the
+ * device without advertising). */
 static enum mgmt_cb_return ota_os_reset_cb(uint32_t event, enum mgmt_cb_return prev_status,
 					   int32_t *rc, uint16_t *group, bool *abort_more,
 					   void *data, size_t data_size)
@@ -381,8 +382,12 @@ static enum mgmt_cb_return ota_os_reset_cb(uint32_t event, enum mgmt_cb_return p
 	ARG_UNUSED(data);
 	ARG_UNUSED(data_size);
 
+	/* Only the Alif flag, not halo_ble_conn_prepare_reboot(): the hook runs
+	 * before os_mgmt sends its reply, and clearing conn_ctx would make
+	 * halo_ble_get_conidx() invalid and drop that reply. conn_ctx has its
+	 * own valid-this-boot guard. */
 	if (event == MGMT_EVT_OP_OS_MGMT_RESET) {
-		halo_ble_conn_prepare_reboot();
+		alif_ble_reset_init_state();
 	}
 
 	return MGMT_CB_OK;
