@@ -218,9 +218,11 @@ void *halo_realloc(void *ptr, size_t size, halo_mem_region_t region)
 	 * untouched and we fall through to the cross-heap path below, which may
 	 * land it in the other heap. */
 	if (old_heap) {
-		bool same_region = (region == HALO_MEM_REGION_AUTO) ||
-				   (region == HALO_MEM_REGION_INTERNAL &&
-				    old_heap == &mem_ctx.internal_heap);
+		/* AUTO prefers internal: a block that spilled into external is
+		 * not grown there, the path below can bring it back. */
+		bool same_region = (region == HALO_MEM_REGION_AUTO ||
+				    region == HALO_MEM_REGION_INTERNAL) &&
+				   old_heap == &mem_ctx.internal_heap;
 #if defined(CONFIG_HALO_MEM_USE_EXTERNAL_SRAM)
 		same_region = same_region ||
 			      (region == HALO_MEM_REGION_EXTERNAL &&
